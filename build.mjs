@@ -1,13 +1,52 @@
-import { writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const KIT = "/Users/harshitshah/.claude/skills/anatomy";
-const k = await import(pathToFileURL(`${KIT}/kit/iso-kit.mjs`).href);
-const G = await import(pathToFileURL(`${KIT}/kit/lathe.mjs`).href);
-const { kitScript } = await import(pathToFileURL(`${KIT}/scripts/inline-kit.mjs`).href);
-
 const HERE = dirname(fileURLToPath(import.meta.url));
+const usage = `Usage: node build.mjs [--light] [--kit <path>]
+
+Options:
+  --light        Build doraemon-anatomy-light.html
+  --kit <path>   Path to anatomy kit (or use ANATOMY_KIT env var)
+  --help         Show this help
+`;
+
+if (process.argv.includes("--help")) {
+  console.log(usage);
+  process.exit(0);
+}
+
+const flagValue = (flag) => {
+  const index = process.argv.indexOf(flag);
+  if (index === -1) return undefined;
+  return process.argv[index + 1];
+};
+
+const kitArg = flagValue("--kit");
+const KIT = resolve(kitArg ?? process.env.ANATOMY_KIT ?? "/Users/harshitshah/.claude/skills/anatomy");
+
+const importFromKit = async (relativePath) => {
+  const fullPath = join(KIT, relativePath);
+  if (!existsSync(fullPath)) {
+    throw new Error(`Missing required file: ${fullPath}`);
+  }
+  return import(pathToFileURL(fullPath).href);
+};
+
+let k;
+let G;
+let kitScript;
+try {
+  k = await importFromKit("kit/iso-kit.mjs");
+  G = await importFromKit("kit/lathe.mjs");
+  ({ kitScript } = await importFromKit("scripts/inline-kit.mjs"));
+} catch (error) {
+  console.error(`Could not load anatomy kit from "${KIT}".`);
+  console.error("Pass --kit <path> or set ANATOMY_KIT.");
+  if (error instanceof Error) console.error(error.message);
+  process.exit(1);
+}
+
 const theme = process.argv.includes("--light") ? "light" : "dark";
 const OUT = join(HERE, theme === "light" ? "doraemon-anatomy-light.html" : "doraemon-anatomy.html");
 
